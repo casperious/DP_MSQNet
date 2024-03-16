@@ -99,48 +99,50 @@ class TimeSformerCLIPInitVideoGuideExecutor:
                   + "[" + str(time.strftime("%H:%M:%S", time.gmtime(elapsed_time))) + "]"
                   + " loss: " + "{:.4f}".format(loss_meter.avg), flush=True)
     
-    def train(self, start_epoch, end_epoch):
+    def train(self, start_epoch, end_epoch,animal):
         for epoch in range(start_epoch, end_epoch):
             self._train_epoch(epoch)
             if (epoch + 1) % self.test_every == 0:
-                eval = self.test()
+                eval = self.test(epoch,animal)
                 if (self.distributed and self.gpu_id == 0) or not self.distributed:
                     print("[INFO] Evaluation Metric: {:.2f}".format(eval * 100), flush=True)
     
-    def test(self):
+      
+    def test(self,epoch,animal):
         self.model.eval()
         eval_meter = AverageMeter()
         for data, label in self.test_loader:
+#             print(data.size())
             data, label = data.to(self.gpu_id), label.long().to(self.gpu_id)
             with torch.no_grad():
                 output = self.model(data)
             eval_this = self.eval_metric(output, label)
             eval_meter.update(eval_this.item(), data.shape[0])
+
+#         print("Model weights:")
+#         for name, param in self.model.named_parameters():
+#             print(f"{name}: {param.data}")
+        print("saving to", animal,".pth" )
+        torch.save(self.model.state_dict(), f'./TrainingEpochs/checkpoint_epoch_{epoch+1}_{animal}.pth')
+
         return eval_meter.avg
     
-    def save(self, file_path="./checkpoint.pth"):
-        backbone_state_dict = self.model.backbone.state_dict()
-        linear_state_dict = self.model.linear.state_dict()
-        transformer_state_dict = self.model.transformer.state_dict()
-        query_embed_state_dict = self.model.query_embed.state_dict()
-        group_linear_state_dict = self.model.fc.state_dict()
-        optimizer_state_dict = self.optimizer.state_dict()
-        torch.save({"backbone": backbone_state_dict,
-                    "linear": linear_state_dict,
-                    "transformer": transformer_state_dict,
-                    "query_embed": query_embed_state_dict,
-                    "group_linear": group_linear_state_dict,
-                    "optimizer": optimizer_state_dict},
-                    file_path)
+    def predict(self,images, checkpoint_path):
+#         print("Here")
+        # Ensure the model is in evaluation mode
+        self.model.load_state_dict(torch.load(checkpoint_path))
+        self.model.eval()
+        
+        # No gradient computation needed
+        with torch.no_grad():
+            # Forward pass through the model
+            output = self.model(images)
 
-    def load(self, file_path):
-        checkpoint = torch.load(file_path)
-        self.model.backbone.load_state_dict(checkpoint["backbone"])
-        self.model.linear.load_state_dict(checkpoint["linear"])
-        self.model.transformer.load_state_dict(checkpoint["transformer"])
-        self.model.query_embed.load_state_dict(checkpoint["query_embed"])
-        self.model.group_linear.load_state_dict(checkpoint["group_linear"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        output = torch.softmax(output, dim=1)
+        
+#         print(output)
+#         print(output.size())
+        return output
 
 
 class PositionalEncoding(nn.Module):

@@ -1,40 +1,41 @@
 import time
-import timm
 import math
 import torch
 from torch import nn, Tensor
 from torch.optim import Adam
+import torch.nn.functional as F
 from utils.utils import AverageMeter
 from torch.nn.parallel import DistributedDataParallel as DDP
-from transformers import CLIPTokenizer, CLIPTextModel, CLIPVisionModel, logging
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from transformers import TimesformerModel, CLIPTokenizer, CLIPTextModel, CLIPVisionModel, logging
 
 
-class Query2LabelCLIP(nn.Module):
-    def __init__(self, class_embed):
+class TimeSformerCLIPInitVideoGuide(nn.Module):
+    def __init__(self, class_embed, num_frames):
         super().__init__()
-        num_classes, hidden_dim = class_embed.shape
-        self.backbone = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        self.pos_encod = PositionalEncoding(d_model=hidden_dim)
-        self.linear = nn.Linear(self.backbone.config.hidden_size, hidden_dim, bias=False)
-        self.transformer = nn.Transformer(d_model=hidden_dim, batch_first=True)
-        self.query_embed = nn.Embedding(num_classes, hidden_dim)
-        self.query_embed.weight = nn.Parameter(class_embed)
-        self.fc = GroupWiseLinear(num_classes, hidden_dim, bias=True)
+        self.num_classes, self.embed_dim = class_embed.shape
+        self.backbone = TimesformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400", num_frames=num_frames, ignore_mismatched_sizes=True)
+        self.linear1 = nn.Linear(in_features=self.backbone.config.hidden_size, out_features=self.embed_dim, bias=False)
+        self.pos_encod = PositionalEncoding(d_model=self.embed_dim)
+        self.image_model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch16")
+        self.linear2 = nn.Linear(in_features=self.backbone.config.hidden_size + self.embed_dim, out_features=self.embed_dim, bias=False)
+        self.query_embed = nn.Parameter(class_embed)
+        self.transformer = nn.Transformer(d_model=self.embed_dim, batch_first=True)
+        self.group_linear = GroupWiseLinear(self.num_classes, self.embed_dim, bias=True)
 
     def forward(self, images):
         b, t, c, h, w = images.size()
-        images = images.reshape(-1, c, h, w)
-        x = self.backbone(images).pooler_output
-        x = x.reshape(b, t, -1)
-        x = self.linear(x)
+        x = self.backbone(images)[0]
+        x = self.linear1(F.adaptive_avg_pool1d(x.transpose(1, 2), t).transpose(1, 2))
         x = self.pos_encod(x)
-        query_embed = self.query_embed.weight.unsqueeze(0).repeat(b, 1, 1)
+        video_features = self.image_model(images.reshape(b*t, c, h, w))[1].reshape(b, t, -1).mean(dim=1, keepdim=True)
+        query_embed = self.linear2(torch.concat((self.query_embed.unsqueeze(0).repeat(b, 1, 1), video_features.repeat(1, self.num_classes, 1)), 2))
         hs = self.transformer(x, query_embed) # b, t, d
-        out = self.fc(hs)
+        out = self.group_linear(hs)
         return out
     
 
-class Query2LabelCLIPExecutor:
+class TimeSformerCLIPInitVideoGuideExecutor:
     def __init__(self, train_loader, test_loader, criterion, eval_metric, class_list, test_every, distributed, gpu_id) -> None:
         super().__init__()
         self.train_loader = train_loader
@@ -45,16 +46,20 @@ class Query2LabelCLIPExecutor:
         self.test_every = test_every
         self.distributed = distributed
         self.gpu_id = gpu_id
+        num_frames = self.train_loader.dataset[0][0].shape[0]
         logging.set_verbosity_error()
         class_embed = self._get_text_features(class_list)
-        q2lclip = Query2LabelCLIP(class_embed).to(gpu_id)
+        model = TimeSformerCLIPInitVideoGuide(class_embed, num_frames).to(gpu_id)
         if distributed: 
-            self.q2lclip = DDP(q2lclip, device_ids=[gpu_id], find_unused_parameters=False)
+            self.model = DDP(model, device_ids=[gpu_id])
         else: 
-            self.q2lclip = q2lclip
-        for p in self.q2lclip.parameters():
+            self.model = model
+        for p in self.model.parameters():
             p.requires_grad = True
-        self.optimizer = Adam([{"params": self.q2lclip.parameters(), "lr": 0.00001}])
+        for p in self.model.image_model.parameters():
+            p.requires_grad = False
+        self.optimizer = Adam([{"params": self.model.parameters(), "lr": 0.00001}])
+        self.scheduler = CosineAnnealingWarmRestarts(self.optimizer, T_0=10)
 
     @staticmethod
     def _get_prompt(cl_names):
@@ -64,8 +69,8 @@ class Query2LabelCLIPExecutor:
         return temp_prompt
     
     def _get_text_features(self, cl_names):
-        text_model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        text_model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch16")
+        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch16")
         act_prompt = self._get_prompt(cl_names)
         texts = tokenizer(act_prompt, padding=True, return_tensors="pt")
         text_class = text_model(**texts).pooler_output.detach()
@@ -73,73 +78,79 @@ class Query2LabelCLIPExecutor:
 
     def _train_batch(self, data, label):
         self.optimizer.zero_grad()
-        output = self.q2lclip(data)
+        output = self.model(data)
         loss_this = self.criterion(output, label)
         loss_this.backward()
         self.optimizer.step()
         return loss_this.item()
 
     def _train_epoch(self, epoch):
-        self.q2lclip.train()
+        self.model.train()
         loss_meter = AverageMeter()
         start_time = time.time()
         for data, label in self.train_loader:
-            data, label = data.to(self.gpu_id), label.to(self.gpu_id)
+            data, label = data.to(self.gpu_id, non_blocking=True), label.to(self.gpu_id, non_blocking=True)
             loss_this = self._train_batch(data, label)
             loss_meter.update(loss_this, data.shape[0])
         elapsed_time = time.time() - start_time
+        self.scheduler.step()
         if (self.distributed and self.gpu_id == 0) or not self.distributed:
             print("Epoch [" + str(epoch + 1) + "]"
                   + "[" + str(time.strftime("%H:%M:%S", time.gmtime(elapsed_time))) + "]"
-                  + " loss: " + "{:.4f}".format(loss_meter.avg))
+                  + " loss: " + "{:.4f}".format(loss_meter.avg), flush=True)
     
-    def train(self, start_epoch, end_epoch):
+    def train(self, start_epoch, end_epoch,animal):
         for epoch in range(start_epoch, end_epoch):
             self._train_epoch(epoch)
             if (epoch + 1) % self.test_every == 0:
-                eval = self.test()
+                eval = self.test(epoch,animal)
                 if (self.distributed and self.gpu_id == 0) or not self.distributed:
-                    print("[INFO] Evaluation Metric: {:.2f}".format(eval * 100))
+                    print("[INFO] Evaluation Metric: {:.2f}".format(eval * 100), flush=True)
     
-    def test(self):
-        self.q2lclip.eval()
+      
+    def test(self,epoch,animal):
+        self.model.eval()
         eval_meter = AverageMeter()
         for data, label in self.test_loader:
+#             print(data.size())
             data, label = data.to(self.gpu_id), label.long().to(self.gpu_id)
             with torch.no_grad():
-                output = self.q2lclip(data)
+                output = self.model(data)
             eval_this = self.eval_metric(output, label)
             eval_meter.update(eval_this.item(), data.shape[0])
+
+#         print("Model weights:")
+#         for name, param in self.model.named_parameters():
+#             print(f"{name}: {param.data}")
+        print("saving to", animal,".pth" )
+        torch.save(self.model.state_dict(), f'./TrainingEpochs/checkpoint_epoch_{epoch+1}_{animal}.pth')
+
         return eval_meter.avg
     
-    def save(self, file_path="./checkpoint.pth"):
-        backbone_state_dict = self.q2lclip.backbone.state_dict()
-        transformer_state_dict = self.q2lclip.transformer.state_dict()
-        query_embed_state_dict = self.q2lclip.query_embed.state_dict()
-        fc_state_dict = self.q2lclip.fc.state_dict()
-        optimizer_state_dict = self.optimizer.state_dict()
-        torch.save({"backbone": backbone_state_dict,
-                    "transformer": transformer_state_dict,
-                    "query_embed": query_embed_state_dict,
-                    "fc": fc_state_dict,
-                    "optimizer": optimizer_state_dict},
-                    file_path)
+    def predict(self,images, checkpoint_path):
+#         print("Here")
+        # Ensure the model is in evaluation mode
+        self.model.load_state_dict(torch.load(checkpoint_path))
+        self.model.eval()
         
-    def load(self, file_path):
-        checkpoint = torch.load(file_path)
-        self.q2lclip.backbone.load_state_dict(checkpoint["backbone"])
-        self.q2lclip.transformer.load_state_dict(checkpoint["transformer"])
-        self.q2lclip.query_embed.load_state_dict(checkpoint["query_embed"])
-        self.q2lclip.fc.load_state_dict(checkpoint["fc"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-    
+        # No gradient computation needed
+        with torch.no_grad():
+            # Forward pass through the model
+            output = self.model(images)
+
+        output = torch.softmax(output, dim=1)
+        
+#         print(output)
+#         print(output.size())
+        return output
+
 
 class PositionalEncoding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one
     used by the Attention is all you need paper, generalized to work on images.
     """
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 50):
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 2000):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
         position = torch.arange(max_len, dtype=torch.float).unsqueeze(1)
