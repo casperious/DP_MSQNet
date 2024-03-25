@@ -14,6 +14,7 @@ import torchvision
 from PIL import Image
 import glob
 import warnings
+from torchvision.transforms import Compose
 warnings.filterwarnings("ignore")
 
 
@@ -84,7 +85,7 @@ def main(args):
     executor.model.to(device)
     
     weights = args.weights    #"/AnimalAI/Weights/checkpoint_Bird.pth"
-    weights = '../'+weights
+    weights = '/mount/data/Weights/'+weights
     
     def sample_indices(num_frames):
         if num_frames <= 16:
@@ -94,9 +95,20 @@ def main(args):
             indices = ticks[:-1] + (ticks[1:] - ticks[:-1]) // 2
         return indices
     
+    #input_mean = [0.48145466, 0.4578275, 0.40821073]
+    #input_std = [0.26862954, 0.26130258, 0.27577711]
+    #input_size = 224
+    #scale_size = 256
+    #unique = Compose([GroupScale(scale_size),
+    #                          GroupCenterCrop(input_size)])
+    #common = Compose([Stack(roll=False),
+    #                          ToTorchFormatTensor(div=True),
+    #                          GroupNormalize(input_mean, input_std)])
+    #transforms = Compose([unique, common])
     transform = transforms.Compose([
     transforms.Resize((224, 224)),  # Resize images if they are not the same size
     transforms.ToTensor(),  # Convert to tensor
+    transforms.Normalize([0.48145466, 0.4578275, 0.40821073], [0.26862954, 0.26130258, 0.27577711]),
     ])
     
     filepath=args.filepath
@@ -118,7 +130,7 @@ def main(args):
             im = transform(im)  # Apply the transformation
             image_list.append(im)
 #     print("image done ", len(image_list))
-
+    
     image_tensor = torch.stack(image_list, dim=0).to(device)
     image_tensor = image_tensor.unsqueeze(0)
     
