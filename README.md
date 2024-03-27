@@ -5,6 +5,7 @@
 ```
 Computer Science Department, University at Albany – SUNY
 ```
+Our experient was done on A100 GPU with CUDA
 ## 1 Module I: Animal Identification
 
 ## 1.1 Data Preparation
