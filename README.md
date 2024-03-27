@@ -71,7 +71,7 @@ In this part, we gave the steps to configure our specific working environment fo
 ```
 !pip show zamba
 !pip install opencv−python−headless==4.5.5.62
-!pip install typer==0.9
+!pip install typer==0.9.0
 ```
 ### 1.3 Training the Model with Zamba
 
