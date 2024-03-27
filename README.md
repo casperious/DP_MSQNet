@@ -127,26 +127,29 @@ pip install -r ’requirements.txt’
 
 Our primary objective with data preparation was to split the dataset into multiple more specific datasets,
 which we hypothesized would improve our test scores if we have different specialized models which are in-
-voked based on Zamba’s prediction on which model is most applicable to the input.datasets/transformsss.py
+voked based on Zamba’s prediction on which model is most applicable to the input. datasets/transformsss.py
 has functionality to prepare the data through various means of transformation to ensure input consis-
 tency.
 
 2.2.1 Purging Redundancies
 
-The data input is train.csv, with an accessory fileARmetadata.xlsx. The two files together define the
-animals and actions found in each frame of each video.train.csvwas minimized totrainlight.csv
-(and the same forval.csv) to remove redundant information.
+The data input is train.csv, with an accessory file ARmetadata.xlsx. The two files together define the
+animals and actions found in each frame of each video.train.csv was minimized to train_light.csv
+(and the same for val.csv) to remove redundant information.
 
 2.2.2 Training Specialized Models
 
-The data is split by runningsplittrain.pywhich generates different data csv files for each subclass
+The data is split by running split_train.py which generates different data csv files for each subclass
 of animal category.
+```
+split_train.py
+```
 
 ### 2.3 Training and Testing
 
 2.3.1 Training
 
-Runmainsplit.pyto train one model for each subclass of animal detected from the training data. One
+Run main_split.py to train one model for each subclass of animal detected from the training data. One
 can specify to perform this in parallel if there is sufficient hardware by using the argument
 
 ```
@@ -157,7 +160,7 @@ model, located in Output/currentdate.
 
 2.3.2 Testing
 
-To test the model on the Animal Behavior dataset, you can runmain.py, either full or split, with the
+To test the model on the Animal Behavior dataset, you can run main.py, either full or split, with the
 parameter
 
 ```
