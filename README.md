@@ -54,26 +54,32 @@ Example directory structure:
 ### 1.2 Setting Up Zamba Working Environment
 
 In this part, we gave the steps to configure our specific working environment for using Zamba.
+```
 ! python−−v e r s i o n
+```
 # python version 3.
-! conda i n s t a l l f f m p e g
-! f f m p e g −v e r s i o n
+```
+! conda install ffmpeg
+! ffmpeg −version
+```
 # ffmpeg version 4.4.
-# I n s t a l l Zamba from the l a t e s t release
-! p i p i n s t a l l h t t p s : / / g i t h u b. com/ d r i v e n d a t a o r g /zamba/ r e l e a s e s
-/ l a t e s t / download /zamba. t a r. g z
-# Verify Zamba i n s t a l l a t i o n , i t i s 2.3.
-! p i p show zamba
-! p i p i n s t a l l opencv−python−h e a d l e s s = = 4. 5. 5. 6 2
-! p i p i n s t a l l t y p e r ==0.9.
-
+# I n s t a l l Zamba from the latest release
+```
+! pip install https://github.com/drivendataorg/zamba/releases/latest/download/zamba.tar.gz
+```
+# Verify Zamba installation, it is 2.3.
+```
+!pip show zamba
+!pip install opencv−python−headless==4.5.5.62
+!pip install typer==0.9
+```
 ### 1.3 Training the Model with Zamba
 
 ```
-Before initiating the training process we modified the Zamba configuration for the timedistributed
+Before initiating the training process we modified the zamba configuration for the timedistributed
 model.
 ```
-# Early stopping c r i t e r i a : mode = min , monitor = v a l l o s s , patience = 3
+# Early stopping criteria: mode = min , monitor = valloss , patience = 3
 
 ```
 To train your model using Zamba, run the following command in your terminal, adjusting paths as
@@ -88,10 +94,12 @@ zamba train --data-dir /../dataset/zamba_train_video
 After training, you can use the trained model to make predictions on new videos. Update your trainconfiguration.yaml
 file with the appropriate paths for conducting the prediction, predictconfig is required as we will be run-
 ning inference on unseen test data.
-p r e d i c t c o n f i g :
-c h e c k p o i n t : /.. / zamba p r e p /zamba o u t /.. / t i m e d i s t r i b u t e d. c k p t
-d a t a d i r : /.. / d a t a s e t /zamba p r e d v i d e o /
-s a v e d i r : /.. / zamba p r e p /zamba o u t /
+predict config :
+
+checkpoint:/../zamba_prep/zamba_out /../timedistributed.ckpt
+data dir:/../dataset/zamba_pre_dvideo/
+savedir:/.. /zamba_prep/zamba_out/
+
 Important parameters in the ‘trainconfiguration.yaml‘ include:
 ```
 - checkpoint: Path to the checkpoint file of your trained model, which is required to load the model
@@ -163,7 +171,7 @@ Before running evaluation, please modify the all relative file paths in evaluati
 Please execute the following command:
 
 ```
-! python3 e v a l u a t i o n. py
+!python3 evaluation.py
 ```
 ## 4 Access to AnimalKingdom dataset
 
