@@ -32,10 +32,10 @@ For training the model, your data must be organized into two key components:
 ```
 ```
 Example CSV (zambatrain.csv):
-f i l e path , s p e c i e s l a b e l
-v i d e o 1 .mp4 , b i r d
-v i d e o 2 .mp4 ,mammal
-v i d e o 3 .mp4 , r e p t i l e
+file path , species label
+video1.mp4 , bird
+video2.mp4 , mammal
+video3.mp4 , reptile
 ```
 1.1.2 Testing Data
 
@@ -47,15 +47,15 @@ Example directory structure:
 /../dataset/zamba_pred_video
 ```
 - Example of the path to each video file for prediction:
-    t e s t v i d e o 1 .mp
-    t e s t v i d e o 2 .mp
+    testvideo1.mp4
+    testvideo2.mp4
 
 
 ### 1.2 Setting Up Zamba Working Environment
 
 In this part, we gave the steps to configure our specific working environment for using Zamba.
 ```
-! python−−v e r s i o n
+! python−−version
 ```
 # python version 3.
 ```
@@ -182,5 +182,7 @@ Please refer to the AnimalKingdom github website:
 https://sutdcv.github.io/Animal-Kingdom/
 
 For all checkpoints files and results from zamba, please contact any one of the authors.
+Link to zamba package: https://github.com/drivendataorg/zamba
+Link to original MSQNet page: https://github.com/mondalanindya/MSQNet
 
 
