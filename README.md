@@ -64,7 +64,7 @@ In this part, we gave the steps to configure our specific working environment fo
 ! ffmpeg −version
 ```
 # ffmpeg version 4.4.
-# I n s t a l l Zamba from the latest release
+# Install Zamba from the latest release
 ```
 ! pip install https://github.com/drivendataorg/zamba/releases/latest/download/zamba.tar.gz
 ```
