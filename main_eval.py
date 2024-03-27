@@ -11,10 +11,12 @@ from models.timesformerclipinitvideoguide import (
 )
 from transformers import TimesformerModel, CLIPTokenizer, CLIPTextModel, CLIPVisionModel, logging
 import torchvision
+from torchvision.transforms import Compose
+from datasets.transforms_ss import *
+# from .transforms_ss import *
 from PIL import Image
 import glob
 import warnings
-from torchvision.transforms import Compose
 warnings.filterwarnings("ignore")
 
 
@@ -32,9 +34,7 @@ def main(args):
         torch.cuda.manual_seed_all(args.seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = True
-        #print("[INFO] Setting SEED: " + str(args.seed))   
-    #else:
-        #print("[INFO] Setting SEED: None")
+       
 
     if(torch.cuda.is_available() == False): print("[WARNING] CUDA is not available.")
 
@@ -60,7 +60,7 @@ def main(args):
     # val or test data
     val_transform = manager.get_test_transforms()
     val_loader = manager.get_test_loader(val_transform)
-#
+
 
     # criterion or loss
     import torch.nn as nn
@@ -84,8 +84,8 @@ def main(args):
     
     executor.model.to(device)
     
-    weights = args.weights    #"/AnimalAI/Weights/checkpoint_Bird.pth"
-    weights = '/mount/data/Weights/'+weights
+    weights = args.weights    #".../Weights/checkpoint_Bird.pth"
+    weights = '.../Weights/'+weights
     
     def sample_indices(num_frames):
         if num_frames <= 16:
@@ -95,47 +95,39 @@ def main(args):
             indices = ticks[:-1] + (ticks[1:] - ticks[:-1]) // 2
         return indices
     
-    #input_mean = [0.48145466, 0.4578275, 0.40821073]
-    #input_std = [0.26862954, 0.26130258, 0.27577711]
-    #input_size = 224
-    #scale_size = 256
-    #unique = Compose([GroupScale(scale_size),
-    #                          GroupCenterCrop(input_size)])
-    #common = Compose([Stack(roll=False),
-    #                          ToTorchFormatTensor(div=True),
-    #                          GroupNormalize(input_mean, input_std)])
-    #transforms = Compose([unique, common])
-    transform = transforms.Compose([
-    transforms.Resize((224, 224)),  # Resize images if they are not the same size
-    transforms.ToTensor(),  # Convert to tensor
-    transforms.Normalize([0.48145466, 0.4578275, 0.40821073], [0.26862954, 0.26130258, 0.27577711]),
-    ])
+    input_mean = [0.48145466, 0.4578275, 0.40821073]
+    input_std = [0.26862954, 0.26130258, 0.27577711]
+    unique = Compose([GroupScale(256),
+                              GroupCenterCrop(224)])
+    common = Compose([Stack(roll=False),ToTorchFormatTensor(div=True),GroupNormalize(input_mean, input_std)])
+    transforms = Compose([unique, common])
     
     filepath=args.filepath
     image_paths = glob.glob(filepath + '*.jpg')
     num_frames = len(image_paths)
     
-    # Sample indices for the frames you want to load
+  
     indices = sample_indices(num_frames)
-    # Sort the image paths to ensure consistent order
+   
     sorted_image_paths = sorted(image_paths)
 
   
     image_list = []
-#     print(filepath,weights)
+
     for idx in indices:
-        if idx < len(sorted_image_paths):  #
+        if idx < len(sorted_image_paths):  
             filename = sorted_image_paths[idx]
             im = Image.open(filename).convert('RGB')  # Convert to RGB to avoid issues with inconsistent channels
-            im = transform(im)  # Apply the transformation
             image_list.append(im)
-#     print("image done ", len(image_list))
     
-    image_tensor = torch.stack(image_list, dim=0).to(device)
-    image_tensor = image_tensor.unsqueeze(0)
+    process_data = transforms(image_list)
+
+    process_data = process_data.view((16, -1) + process_data.size()[-2:])
+    process_data = process_data.unsqueeze(0)
+    process_data = process_data.to(device)
+
     
-    out = executor.predict(image_tensor, weights)
-#     print(out.size)
+    out = executor.predict(process_data, weights)
     return out
 
 
@@ -166,5 +158,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     print(main(args))
+  
 
 
