@@ -15,15 +15,16 @@ warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def filter_matrix_values_and_indexes(A, threshold):
+    
     # Moving A to the device (GPU if available)
     A = A.to(device)
     filtered_values = []
     indexes = []
-
+    
     for i in range(A.shape[0]):
         row = A[i]
         above_threshold = row >= threshold
-
+        
         if above_threshold.any():
             print("Yes, elements above threshold in row", i)
             filtered_row_values = row[above_threshold].tolist()
@@ -33,11 +34,12 @@ def filter_matrix_values_and_indexes(A, threshold):
             max_val_index = torch.argmax(row)  # Get the index of the max value in the row
             filtered_row_values = [row[max_val_index].item()]  # Get the max value itself
             filtered_row_indexes = [max_val_index.item()]  # Convert index to item (int)
-
+        
         filtered_values.append(filtered_row_values)
         indexes.append(filtered_row_indexes)
-
+    
     return filtered_values, indexes
+
 
 def eval(pred, target):
     metric = MultilabelAveragePrecision(num_labels=140, average="micro", thresholds=None)
@@ -54,7 +56,7 @@ def get_weighted_prediction(filtered_prob, msq_pred):
 
 
 def prepare_label():
-    df_original = pd.read_csv('/mount/data/dataset/AnimalKingdom/action_recognition/annotation/val_light.csv',delimiter=';')
+    df_original = pd.read_csv('.../AnimalKingdom/action_recognition/annotation/val_light.csv',delimiter=';')
 
     # Expanding the 'labels' column into a list of integers
     df_original['labels'] = df_original['labels'].apply(lambda x: [int(i) for i in x.split(',')])
@@ -74,37 +76,39 @@ def prepare_label():
     target.rename(columns={'index': 'video_id'}, inplace=True)
     return target
 
-def random_sample_zamba(file_path):
+# def random_sample_zamba(file_path):
     
-    df = pd.read_csv(file_path)
+#     df = pd.read_csv(file_path)
 
-    # Randomly sample rows from the DataFrame. Adjust the number of rows as needed.
-    sampled_df = df.sample(frac=0.02)  # Here, sampling changed from 0.1
+#     # Randomly sample rows from the DataFrame. Adjust the number of rows as needed.
+#     sampled_df = df.sample(frac=0.0005)  # Here, sampling 
 
-    # Reindex the sampled DataFrame
-    sampled_df.reset_index(drop=True, inplace=True)
+#     # Reindex the sampled DataFrame
+#     sampled_df.reset_index(drop=True, inplace=True)
 
-    return sampled_df
+#     return sampled_df
 
 
 if __name__ == '__main__':
-
-    ori_zamba_file = '/mount/data/dataset/AnimalKingdom/action_recognition/annotation/zamba_prep/zamba_out/version_3_time_distributed_prediction/zamba_chunks/chunk_5.csv'
-    #mount/data/dataset/AnimalKingdom/action_recognition/annotation/zamba_prep/zamba_out/version_3_time_distributed_prediction/zamba_predictions.csv
+    
+   
+    ori_zamba_file = '.../zamba_predictions.csv'
 
     species = pd.read_csv(ori_zamba_file)
-    #species = random_sample_zamba(ori_zamba_file)
+
     species_exclude_path = species.iloc[:, 1:]
     species_tensor = torch.tensor(species_exclude_path.to_numpy())
 
-    threshold = 0.9   #changed from 0.1 checking
+    threshold = 0.9
+
 
     filtered_values, indexes = filter_matrix_values_and_indexes(species_tensor, threshold)
+
     
     dic_species = {0:'Amphibian', 1:'Bird', 2:'Fish', 3:'Insect', 4:'Mammal', 5:'Reptile', 6:'Sea-animal'}
     video_list = species.iloc[:, 0].tolist()
  
-    filepath = '/mount/data/dataset/AnimalKingdom/action_recognition/dataset/image/' 
+    filepath = '.../AnimalKingdom/action_recognition/dataset/image/' 
     command = "python3 main_eval.py --dataset animalkingdom --model timesformerclipinitvideoguide --gpu 0 "
     #After filtering, index will point to which MSQNet shoule be run. for example first video results in indexes: [0, 3],
     # we will need to run amphibian and insect MSQNet.
@@ -120,7 +124,7 @@ if __name__ == '__main__':
         video_name = video_name_split[-1]
         name_split = video_name.split('.')
         vid_name = name_split[0]
-        print(vid_name)
+
         vid_labels = labels.loc[labels['video_id']==vid_name]
         true_labels.append(vid_labels)
         fp = filepath+vid_name+'/'
@@ -128,62 +132,55 @@ if __name__ == '__main__':
         if(isinstance(indexes[index],list)):
             final_output=[]
             for i in range(len(indexes[index])):
-                print("In multi class")
                 val = indexes[index]
                 checkpoint = dic_species[val[i]]
-#                 print(checkpoint)
+
                 run_command = command + "--weights checkpoint_"+checkpoint +".pth --filepath "+fp
                 process = subprocess.check_output(run_command, shell=True, text=True)
-                print(process)
+                
                 output = process
                 output = output.replace('\n','')
                 output = output.replace(' ','')
-                #print("step1: ", output)
+                
                 output = output[8:-16]
                 
                 output_arr = np.fromstring(output[1:-1],dtype=np.float64,sep=',')
-                print(output_arr)
                 output_arr = output_arr.tolist()
-                print(output_arr)
                 final_output.append(output_arr)
             final_arr = np.array(final_output)
          
             res = get_weighted_prediction(filtered_values[index],final_arr)
-
+            
             final_predictions.append(res)
         else:
-            print("In single class")
             checkpoint = dic_species[indexes[index]]
-#             print(checkpoint)
+             
             run_command = command + "--weights checkpoint_"+checkpoint +".pth --filepath "+fp
             process = subprocess.check_output(run_command, shell=True, text=True)
             output = process
-            print(output)
+
             output = output.replace('\n','')
-            print(output)
             output = output.replace(' ','')
-            print(output)
             output = output[8:-16]
-            print(output)
             output_arr = np.fromstring(output[1:-1],dtype=np.float64,sep=',')
-            print(output_arr)
+
             output_arr = output_arr.tolist()
-            #output_arr = output_arr.reshape((1,140))
-            #res = get_weighted_prediction(filtered_values[index],output_arr)
-            print(output_arr)
             final_predictions.append(output_arr)
 
 
-    print(final_predictions)
     final_predictions_tensor = torch.tensor(final_predictions)
+    final_predictions_tensor = final_predictions_tensor.squeeze()
+    
 
     true_labels_processed = [df.drop(columns=["video_id"]).to_numpy() for df in true_labels]
 
     true_labels_tensor = torch.tensor(true_labels_processed)
     true_labels_tensor = true_labels_tensor.squeeze() 
+ 
 
     
     
     metric = eval(final_predictions_tensor,true_labels_tensor) * 100
-    with open('/mount/data/Evaluation/Jeremy_Eval_4/Chunk5_metric_results.txt', 'w') as f:
+    
+    with open('.../Eval_Result/metric_results.txt', 'w') as f:
         f.write(f'MAP result: {metric}\n')
