@@ -100,7 +100,7 @@ if __name__ == '__main__':
     middle = label_categories.loc[label_categories['segment']=='middle']
     middle = middle['index']
     middle=  middle.to_numpy()
-    print(head,tail,middle)
+    #print(head,tail,middle)
     species = pd.read_csv(ori_zamba_file)
     #species = random_sample_zamba(ori_zamba_file)
     species_exclude_path = species.iloc[:, 1:]
@@ -144,8 +144,8 @@ if __name__ == '__main__':
         for itr in range(140):
             if(labs.iloc[0,itr] == 1):
                 extracted_labels.append(itr)
-                print(itr)
-        print(extracted_labels)
+                #print(itr)
+        #print(extracted_labels)
         if extracted_labels[0] in head:
             true_heads.append(vid_labels)
         elif extracted_labels[0] in tail:
@@ -154,7 +154,7 @@ if __name__ == '__main__':
             true_middles.append(vid_labels)
         true_labels.append(vid_labels)
         fp = filepath+vid_name+'/'
-        print(true_heads,true_tails,true_middles)
+        #print(true_heads,true_tails,true_middles)
         if(isinstance(indexes[index],list)):
             final_output=[]
             for i in range(len(indexes[index])):
@@ -205,7 +205,7 @@ if __name__ == '__main__':
             output_arr = output_arr.tolist()
             #output_arr = output_arr.reshape((1,140))
             #res = get_weighted_prediction(filtered_values[index],output_arr)
-            print(output_arr)
+            #print(output_arr)
             if extracted_labels[0] in head:
                 final_heads.append(output_arr)
             elif extracted_labels[0] in tail:
@@ -223,16 +223,16 @@ if __name__ == '__main__':
     final_middles_tensor = torch.tensor(final_middles)
 
     true_labels_processed = [df.drop(columns=["video_id"]).to_numpy() for df in true_labels]
-    print(true_labels_processed)
+    #print(true_labels_processed)
     true_labels_tensor = torch.tensor(true_labels_processed)
     true_labels_tensor = true_labels_tensor.squeeze() 
 
     true_heads_processed = [df.drop(columns=["video_id"]).to_numpy() for df in true_heads]
-    print(true_heads_processed)
+    #print(true_heads_processed)
     true_heads_tensor = torch.tensor(true_heads_processed)
     true_heads_tensor = true_heads_tensor.squeeze() 
     true_heads_tensor = true_heads_tensor.long()
-    print(true_heads_tensor)
+    #print(true_heads_tensor)
     
     true_tails_processed = [df.drop(columns=["video_id"]).to_numpy() for df in true_tails]
     true_tails_tensor = torch.tensor(true_tails_processed)
