@@ -6,8 +6,9 @@
 Computer Science Department, University at Albany – SUNY
 ```
 This is the formal implementation of paper "DUAL-PHASE MSQNET FOR SPECIES-SPECIFIC ANIMAL ACTIVITY RECOGNITION" which is accepted at ICME 2024 GC-MMVRAC workshop. Our experient was done on A100 GPU with CUDA
-## 1 Module I: Animal Identification
 https://doi.ieeecomputersociety.org/10.1109/ICMEW63481.2024.10645377 
+## 1 Module I: Animal Identification
+
 
 ## 1.1 Data Preparation
 
